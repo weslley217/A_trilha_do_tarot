@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameAction, GameRoom, InternalUser, RoomPlayer, TarotCard } from './types';
-import { supabase } from './supabase';
+import { isUsingSupabaseFallback, supabase } from './supabase';
 import { TAROT_CARDS } from './data/tarotCards';
 
 const WIN_TARGET = 10;
@@ -780,6 +780,9 @@ function App() {
             <button type="submit">Entrar</button>
           </form>
           {loginError && <p className="error-text">{loginError}</p>}
+          {isUsingSupabaseFallback && (
+            <p className="muted">Aviso: variaveis da Vercel ausentes. App usando fallback de conexao Supabase.</p>
+          )}
         </div>
       </div>
     );

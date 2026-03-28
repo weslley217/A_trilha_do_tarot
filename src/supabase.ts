@@ -1,11 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+const fallbackUrl = 'https://hmqznjjfzllkxeqqjrzm.supabase.co';
+const fallbackAnonKey = 'sb_publishable_iqgn7xc6giRLAFEKiDfnHA_rzkErpeH';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Defina VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY no ambiente.');
-}
+const envUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
+const envAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
+
+export const isUsingSupabaseFallback = !envUrl || !envAnonKey;
+export const supabaseUrl = envUrl || fallbackUrl;
+export const supabaseAnonKey = envAnonKey || fallbackAnonKey;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
