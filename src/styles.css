@@ -291,6 +291,12 @@ button:disabled {
   opacity: 0.5;
 }
 
+.tarot-card.used {
+  opacity: 0.38;
+  filter: grayscale(0.45);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

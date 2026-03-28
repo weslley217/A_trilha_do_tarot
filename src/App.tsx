@@ -32,7 +32,10 @@ function formatSigned(value: number): string {
 }
 
 function stripActionMeta(description: string): string {
-  return description.replace(/\s*::WHEEL:[+-]?\d+/gi, '').trim();
+  return description
+    .replace(/\s*::WHEEL:[+-]?\d+/gi, '')
+    .replace(/\s*::DECK_RESET/gi, '')
+    .trim();
 }
 
 function App() {
@@ -64,6 +67,7 @@ function App() {
   const [wheelSpinDegrees, setWheelSpinDegrees] = useState(0);
   const lastAnimatedActionIdRef = useRef<number | null>(null);
   const initializedRoomRef = useRef<string | null>(null);
+  const animationTimerRef = useRef<number | null>(null);
 
   const userMap = useMemo(() => {
     const map = new Map<string, InternalUser>();
@@ -116,6 +120,22 @@ function App() {
   const liveAnimationActorName = liveAnimationAction ? (userMap.get(liveAnimationAction.actor_username)?.display_name ?? liveAnimationAction.actor_username) : '';
   const wheelMatch = liveAnimationAction?.description.match(/::WHEEL:([+-]?\d+)/i);
   const wheelResult = wheelMatch ? Number(wheelMatch[1]) : null;
+  const usedCardIds = useMemo(() => {
+    if (!selectedRoom || selectedRoom.status !== 'running') return new Set<string>();
+    const startedAt = selectedRoom.started_at ? new Date(selectedRoom.started_at).getTime() : 0;
+    const resetMarker = actions.find((action) => action.description.includes('::DECK_RESET'));
+    const resetId = resetMarker?.id ?? 0;
+    const used = new Set<string>();
+
+    actions.forEach((action) => {
+      if (!action.card_key) return;
+      if (action.id <= resetId) return;
+      if (startedAt > 0 && new Date(action.created_at).getTime() < startedAt) return;
+      used.add(action.card_key);
+    });
+
+    return used;
+  }, [actions, selectedRoom]);
 
   const toast = (message: string) => {
     setUiMessage(message);
@@ -147,7 +167,7 @@ function App() {
       await Promise.all([
         supabase.from('game_rooms').select('*').eq('id', roomId).maybeSingle(),
         supabase.from('room_players').select('*').eq('room_id', roomId).order('joined_at'),
-        supabase.from('game_actions').select('*').eq('room_id', roomId).order('created_at', { ascending: false }).limit(30),
+        supabase.from('game_actions').select('*').eq('room_id', roomId).order('created_at', { ascending: false }).limit(120),
       ]);
 
     if (roomError) throw roomError;
@@ -248,6 +268,10 @@ function App() {
   useEffect(() => {
     if (!selectedRoomId || actions.length === 0) {
       setLiveAnimationActionId(null);
+      if (animationTimerRef.current !== null) {
+        window.clearTimeout(animationTimerRef.current);
+        animationTimerRef.current = null;
+      }
       lastAnimatedActionIdRef.current = null;
       initializedRoomRef.current = null;
       return;
@@ -280,12 +304,22 @@ function App() {
     }
 
     const timeoutMs = latest.card_key === 'wheel' ? 4300 : 2600;
-    const timer = window.setTimeout(() => {
+    if (animationTimerRef.current !== null) {
+      window.clearTimeout(animationTimerRef.current);
+    }
+    animationTimerRef.current = window.setTimeout(() => {
       setLiveAnimationActionId((prev) => (prev === latest.id ? null : prev));
+      animationTimerRef.current = null;
     }, timeoutMs);
-
-    return () => window.clearTimeout(timer);
   }, [actions, selectedRoomId]);
+
+  useEffect(() => {
+    return () => {
+      if (animationTimerRef.current !== null) {
+        window.clearTimeout(animationTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -520,6 +554,11 @@ function App() {
       toast('Aguarde seu turno.');
       return;
     }
+    if (usedCardIds.has(selectedCard.id)) {
+      toast('Essa carta ja foi usada nesta rodada.');
+      setSelectedCard(null);
+      return;
+    }
 
     const mutable = roomPlayers.map((player) => ({ ...player }));
     const map = new Map(mutable.map((player) => [player.username, player]));
@@ -668,6 +707,19 @@ function App() {
       });
 
       if (actionError) throw actionError;
+
+      const usedAfterPlay = new Set(usedCardIds);
+      usedAfterPlay.add(selectedCard.id);
+      if (!winner && usedAfterPlay.size >= TAROT_CARDS.length) {
+        const { error: resetDeckError } = await supabase.from('game_actions').insert({
+          room_id: selectedRoom.id,
+          actor_username: actor.username,
+          target_username: null,
+          card_key: null,
+          description: 'Todas as cartas foram usadas. O baralho foi renovado para uma nova rodada. ::DECK_RESET',
+        });
+        if (resetDeckError) throw resetDeckError;
+      }
 
       setSelectedCard(null);
       setCardTarget('');
@@ -938,24 +990,28 @@ function App() {
                 <h2>Baralho Arcano</h2>
                 <p className="muted">{canShowCards ? 'Seu turno: escolha uma carta.' : 'Cartas ativas somente para o jogador da vez.'}</p>
               </div>
+              <p className="muted">Cartas disponiveis: {TAROT_CARDS.length - usedCardIds.size}/{TAROT_CARDS.length}</p>
               <div className="cards-grid">
-                {TAROT_CARDS.map((card) => (
-                  <button
-                    key={card.id}
-                    className={`tarot-card ${canShowCards ? '' : 'locked'}`}
-                    disabled={!canShowCards}
-                    onClick={() => {
-                      setSelectedCard(card);
-                      setCardTarget('');
-                    }}
-                    style={{ background: `linear-gradient(160deg, ${card.palette[0]}dd, ${card.palette[1]}dd)` }}
-                  >
-                    <p>{card.arcana}</p>
-                    <span>{card.symbol}</span>
-                    <h3>{card.name}</h3>
-                    <small>{card.effectText}</small>
-                  </button>
-                ))}
+                {TAROT_CARDS.map((card) => {
+                  const isUsed = usedCardIds.has(card.id);
+                  return (
+                    <button
+                      key={card.id}
+                      className={`tarot-card ${canShowCards ? '' : 'locked'} ${isUsed ? 'used' : ''}`}
+                      disabled={!canShowCards || isUsed}
+                      onClick={() => {
+                        setSelectedCard(card);
+                        setCardTarget('');
+                      }}
+                      style={{ background: `linear-gradient(160deg, ${card.palette[0]}dd, ${card.palette[1]}dd)` }}
+                    >
+                      <p>{card.arcana}</p>
+                      <span>{isUsed ? '✧' : card.symbol}</span>
+                      <h3>{card.name}</h3>
+                      <small>{isUsed ? 'Carta usada' : 'Clique para revelar o efeito'}</small>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           </>
