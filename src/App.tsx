@@ -846,6 +846,7 @@ function App() {
   const canShowCards = selectedRoom?.status === 'running' && isCurrentUserTurn && isPlayerInRoom;
   const targetCandidates = roomPlayers.filter((player) => player.username !== sessionUser.username);
   const wheelSlots = [-2, -1, 0, 1, 2, 3];
+  const showVictoryCeremony = Boolean(selectedRoom?.status === 'finished' && winnerName);
 
   return (
     <div className="app-bg">
@@ -935,7 +936,7 @@ function App() {
                       <div key={player.id} className={`score-row ${isWinner ? 'winner' : ''}`}>
                         <div>
                           <strong>{displayName}</strong>
-                          <p>{player.is_ready ? 'Pronto' : 'Aguardando'} {currentTurnUsername === player.username ? '• turno atual' : ''}</p>
+                          <p>{player.is_ready ? 'Pronto' : 'Aguardando'} {currentTurnUsername === player.username ? '- turno atual' : ''}</p>
                         </div>
                         <span>{player.chips}</span>
                         {sessionUser.role === 'master' && selectedRoom.status === 'waiting' && (
@@ -1025,8 +1026,8 @@ function App() {
               <div className="modal-content">
                 <p className="eyebrow">{selectedCard.arcana}</p>
                 <h3>{selectedCard.name}</h3>
-                <p><strong>Efeito:</strong> {selectedCard.effectText}</p>
-                <p><strong>Leitura:</strong> {selectedCard.meaning}</p>
+                <p className="effect-highlight"><strong>Efeito:</strong> {selectedCard.effectText}</p>
+                <p className="meaning-italic">({selectedCard.meaning})</p>
 
                 {'requiresTarget' in selectedCard.effect && selectedCard.effect.requiresTarget && (
                   <select value={cardTarget} onChange={(event) => setCardTarget(event.target.value)}>
@@ -1052,7 +1053,7 @@ function App() {
               {liveAnimationCard.id === 'wheel' ? (
                 <>
                   <div className="wheel-stage">
-                    <div className="wheel-pointer">▼</div>
+                    <div className="wheel-pointer">v</div>
                     <div className="wheel-disc" style={{ transform: `rotate(${wheelSpinDegrees}deg)` }}>
                       {wheelSlots.map((slot, index) => (
                         <span
@@ -1073,6 +1074,20 @@ function App() {
                   <p className="muted">{stripActionMeta(liveAnimationAction.description)}</p>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {showVictoryCeremony && (
+          <div className="victory-overlay">
+            <div className="victory-card">
+              <p className="victory-text">VOCE FOI SAGRADO VITORIOSO PELO REI FAMINTO</p>
+              <p className="winner-line">Vencedor da partida: {winnerName}</p>
+              <img className="victory-image" src="/rei-faminto.svg" alt="Rei Faminto" />
+              <div className="button-row">
+                <button onClick={resetMatch} disabled={isMutating}>Nova partida</button>
+                <button className="ghost-btn" onClick={() => setSelectedRoomId(null)}>Voltar para selecao</button>
+              </div>
             </div>
           </div>
         )}
