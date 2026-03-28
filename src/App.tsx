@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameAction, GameRoom, InternalUser, RoomPlayer, TarotCard } from './types';
 import { supabase } from './supabase';
 import { TAROT_CARDS } from './data/tarotCards';
@@ -27,6 +27,14 @@ function formatTime(value: string): string {
   return new Date(value).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatSigned(value: number): string {
+  return value >= 0 ? `+${value}` : `${value}`;
+}
+
+function stripActionMeta(description: string): string {
+  return description.replace(/\s*::WHEEL:[+-]?\d+/gi, '').trim();
+}
+
 function App() {
   const [users, setUsers] = useState<InternalUser[]>([]);
   const [sessionUser, setSessionUser] = useState<InternalUser | null>(null);
@@ -52,6 +60,10 @@ function App() {
   const [cardTarget, setCardTarget] = useState('');
   const [isMutating, setIsMutating] = useState(false);
   const [uiMessage, setUiMessage] = useState('');
+  const [liveAnimationActionId, setLiveAnimationActionId] = useState<number | null>(null);
+  const [wheelSpinDegrees, setWheelSpinDegrees] = useState(0);
+  const lastAnimatedActionIdRef = useRef<number | null>(null);
+  const initializedRoomRef = useRef<string | null>(null);
 
   const userMap = useMemo(() => {
     const map = new Map<string, InternalUser>();
@@ -64,6 +76,12 @@ function App() {
     roomPlayers.forEach((player) => map.set(player.username, player));
     return map;
   }, [roomPlayers]);
+
+  const cardsById = useMemo(() => {
+    const map = new Map<string, TarotCard>();
+    TAROT_CARDS.forEach((card) => map.set(card.id, card));
+    return map;
+  }, []);
 
   const visibleRooms = useMemo(() => {
     if (!sessionUser) return [];
@@ -90,6 +108,14 @@ function App() {
   const isCurrentUserTurn = Boolean(sessionUser && currentTurnUsername === sessionUser.username);
   const isPlayerInRoom = Boolean(sessionUser && roomPlayerMap.get(sessionUser.username));
   const allReady = roomPlayers.length > 0 && roomPlayers.every((player) => player.is_ready);
+  const liveAnimationAction = useMemo(() => {
+    if (liveAnimationActionId == null) return null;
+    return actions.find((action) => action.id === liveAnimationActionId) ?? null;
+  }, [actions, liveAnimationActionId]);
+  const liveAnimationCard = liveAnimationAction?.card_key ? cardsById.get(liveAnimationAction.card_key) ?? null : null;
+  const liveAnimationActorName = liveAnimationAction ? (userMap.get(liveAnimationAction.actor_username)?.display_name ?? liveAnimationAction.actor_username) : '';
+  const wheelMatch = liveAnimationAction?.description.match(/::WHEEL:([+-]?\d+)/i);
+  const wheelResult = wheelMatch ? Number(wheelMatch[1]) : null;
 
   const toast = (message: string) => {
     setUiMessage(message);
@@ -218,6 +244,48 @@ function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedRoomId, sessionUser?.username]);
+
+  useEffect(() => {
+    if (!selectedRoomId || actions.length === 0) {
+      setLiveAnimationActionId(null);
+      lastAnimatedActionIdRef.current = null;
+      initializedRoomRef.current = null;
+      return;
+    }
+
+    const latest = actions[0];
+    if (initializedRoomRef.current !== selectedRoomId) {
+      initializedRoomRef.current = selectedRoomId;
+      lastAnimatedActionIdRef.current = latest.id;
+      setLiveAnimationActionId(null);
+      return;
+    }
+
+    if (lastAnimatedActionIdRef.current === latest.id) return;
+    lastAnimatedActionIdRef.current = latest.id;
+
+    if (!latest.card_key) return;
+
+    setLiveAnimationActionId(latest.id);
+
+    if (latest.card_key === 'wheel') {
+      const values = [-2, -1, 0, 1, 2, 3];
+      const match = latest.description.match(/::WHEEL:([+-]?\d+)/i);
+      const rolled = match ? Number(match[1]) : 0;
+      const index = Math.max(0, values.indexOf(rolled));
+      const slice = 360 / values.length;
+      const targetAngle = 360 - (index * slice + slice / 2);
+      const turns = (Math.floor(Math.random() * 3) + 4) * 360;
+      setWheelSpinDegrees(turns + targetAngle);
+    }
+
+    const timeoutMs = latest.card_key === 'wheel' ? 4300 : 2600;
+    const timer = window.setTimeout(() => {
+      setLiveAnimationActionId((prev) => (prev === latest.id ? null : prev));
+    }, timeoutMs);
+
+    return () => window.clearTimeout(timer);
+  }, [actions, selectedRoomId]);
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -475,6 +543,7 @@ function App() {
     };
 
     const effect = selectedCard.effect;
+    let wheelDelta: number | null = null;
 
     switch (effect.kind) {
       case 'self_delta':
@@ -522,6 +591,7 @@ function App() {
       case 'random_actor_delta': {
         const span = effect.max - effect.min + 1;
         const randomDelta = Math.floor(Math.random() * span) + effect.min;
+        wheelDelta = randomDelta;
         applyDelta(actor, randomDelta);
         break;
       }
@@ -581,11 +651,13 @@ function App() {
 
       const actorName = userMap.get(actor.username)?.display_name ?? actor.username;
       const targetName = target ? userMap.get(target.username)?.display_name ?? target.username : null;
-      const baseLog = `${actorName} jogou ${selectedCard.name}.${targetName ? ` Alvo: ${targetName}.` : ''}`;
+      const wheelLog = wheelDelta != null ? ` Resultado da roleta: ${formatSigned(wheelDelta)}.` : '';
+      const wheelMeta = wheelDelta != null ? ` ::WHEEL:${formatSigned(wheelDelta)}` : '';
+      const baseLog = `${actorName} jogou ${selectedCard.name}.${targetName ? ` Alvo: ${targetName}.` : ''}${wheelLog}`;
 
       const description = winner
-        ? `${baseLog} ${userMap.get(winner.username)?.display_name ?? winner.username} venceu a partida!`
-        : `${baseLog} Proximo turno: ${userMap.get(order[nextIndex] ?? '')?.display_name ?? order[nextIndex] ?? '-'}.`;
+        ? `${baseLog} ${userMap.get(winner.username)?.display_name ?? winner.username} venceu a partida!${wheelMeta}`
+        : `${baseLog} Proximo turno: ${userMap.get(order[nextIndex] ?? '')?.display_name ?? order[nextIndex] ?? '-'}.${wheelMeta}`;
 
       const { error: actionError } = await supabase.from('game_actions').insert({
         room_id: selectedRoom.id,
@@ -702,7 +774,6 @@ function App() {
         <div className="auth-card">
           <p className="eyebrow">A Trilha do Tarot</p>
           <h1>Entrada da Sessao</h1>
-          <p className="auth-tip">Mestre: mestre/123456 | Jogadores: senha 1234</p>
           <form onSubmit={handleLogin} className="auth-form">
             <input value={loginName} onChange={(e) => setLoginName(e.target.value)} placeholder="Login ou nome" />
             <input value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} type="password" placeholder="Senha" />
@@ -719,6 +790,7 @@ function App() {
   const availablePlayers = users.filter((user) => user.role === 'player' && !roomPlayerMap.has(user.username));
   const canShowCards = selectedRoom?.status === 'running' && isCurrentUserTurn && isPlayerInRoom;
   const targetCandidates = roomPlayers.filter((player) => player.username !== sessionUser.username);
+  const wheelSlots = [-2, -1, 0, 1, 2, 3];
 
   return (
     <div className="app-bg">
@@ -852,7 +924,7 @@ function App() {
                 {actions.map((action) => (
                   <div key={action.id} className="history-item">
                     <span>{formatTime(action.created_at)}</span>
-                    <p>{action.description}</p>
+                    <p>{stripActionMeta(action.description)}</p>
                   </div>
                 ))}
               </div>
@@ -908,6 +980,40 @@ function App() {
 
                 <button onClick={applyCardEffect} disabled={isMutating}>Aplicar efeito</button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {liveAnimationAction && liveAnimationCard && (
+          <div className="live-animation-overlay">
+            <div className={`live-animation-card ${liveAnimationCard.id === 'wheel' ? 'wheel' : ''}`}>
+              <p className="eyebrow">Carta revelada para todos</p>
+              <h3>{liveAnimationActorName} jogou {liveAnimationCard.name}</h3>
+
+              {liveAnimationCard.id === 'wheel' ? (
+                <>
+                  <div className="wheel-stage">
+                    <div className="wheel-pointer">▼</div>
+                    <div className="wheel-disc" style={{ transform: `rotate(${wheelSpinDegrees}deg)` }}>
+                      {wheelSlots.map((slot, index) => (
+                        <span
+                          key={`wheel-slot-${slot}`}
+                          className="wheel-slot"
+                          style={{ transform: `rotate(${index * 60}deg) translateY(-84px) rotate(${-index * 60}deg)` }}
+                        >
+                          {formatSigned(slot)}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="wheel-result">Resultado: {wheelResult != null ? formatSigned(wheelResult) : '-'}</p>
+                </>
+              ) : (
+                <>
+                  <div className="live-card-glyph">{liveAnimationCard.symbol}</div>
+                  <p className="muted">{stripActionMeta(liveAnimationAction.description)}</p>
+                </>
+              )}
             </div>
           </div>
         )}
