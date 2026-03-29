@@ -62,8 +62,13 @@ export interface TarotCard {
   name: string;
   symbol: string;
   palette: [string, string];
+  rules: TarotCardRule[];
+}
+
+export interface TarotCardRule {
+  id: string;
   effect: CardEffect;
   effectText: string;
-  meaning: string;
+  flavorText: string;
 }
 

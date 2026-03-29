@@ -35,7 +35,31 @@ function stripActionMeta(description: string): string {
   return description
     .replace(/\s*::WHEEL:[+-]?\d+/gi, '')
     .replace(/\s*::DECK_RESET/gi, '')
+    .replace(/\s*::RULESET:[^\s]+/gi, '')
     .trim();
+}
+
+type RuleSetMap = Record<string, number>;
+
+function encodeRuleSet(rules: RuleSetMap): string {
+  return encodeURIComponent(JSON.stringify(rules));
+}
+
+function decodeRuleSet(token: string): RuleSetMap | null {
+  try {
+    const decoded = decodeURIComponent(token);
+    const parsed = JSON.parse(decoded) as RuleSetMap;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function extractRuleSetToken(description: string): RuleSetMap | null {
+  const match = description.match(/::RULESET:([^\s]+)/i);
+  if (!match) return null;
+  return decodeRuleSet(match[1]);
 }
 
 function App() {
@@ -87,6 +111,14 @@ function App() {
     return map;
   }, []);
 
+  const defaultRuleSet = useMemo(() => {
+    const map: RuleSetMap = {};
+    TAROT_CARDS.forEach((card) => {
+      map[card.id] = 0;
+    });
+    return map;
+  }, []);
+
   const visibleRooms = useMemo(() => {
     if (!sessionUser) return [];
     if (sessionUser.role === 'master') return rooms;
@@ -120,6 +152,18 @@ function App() {
   const liveAnimationActorName = liveAnimationAction ? (userMap.get(liveAnimationAction.actor_username)?.display_name ?? liveAnimationAction.actor_username) : '';
   const wheelMatch = liveAnimationAction?.description.match(/::WHEEL:([+-]?\d+)/i);
   const wheelResult = wheelMatch ? Number(wheelMatch[1]) : null;
+  const activeRuleSet = useMemo(() => {
+    for (const action of actions) {
+      const parsed = extractRuleSetToken(action.description);
+      if (parsed) return parsed;
+    }
+    return defaultRuleSet;
+  }, [actions, defaultRuleSet]);
+  const selectedCardRule = useMemo(() => {
+    if (!selectedCard) return null;
+    const index = activeRuleSet[selectedCard.id] ?? 0;
+    return selectedCard.rules[index] ?? selectedCard.rules[0] ?? null;
+  }, [activeRuleSet, selectedCard]);
   const usedCardIds = useMemo(() => {
     if (!selectedRoom || selectedRoom.status !== 'running') return new Set<string>();
     const startedAt = selectedRoom.started_at ? new Date(selectedRoom.started_at).getTime() : 0;
@@ -142,6 +186,15 @@ function App() {
     window.setTimeout(() => {
       setUiMessage((prev) => (prev === message ? '' : prev));
     }, 2600);
+  };
+
+  const generateRandomRuleSet = (): RuleSetMap => {
+    const ruleSet: RuleSetMap = {};
+    TAROT_CARDS.forEach((card) => {
+      const randomIndex = Math.floor(Math.random() * card.rules.length);
+      ruleSet[card.id] = randomIndex;
+    });
+    return ruleSet;
   };
 
   const fetchUsers = async () => {
@@ -513,13 +566,15 @@ function App() {
 
     const first = turnOrder[0] ?? '-';
     const firstName = userMap.get(first)?.display_name ?? first;
+    const newRuleSet = generateRandomRuleSet();
+    const ruleSetToken = encodeRuleSet(newRuleSet);
 
     await supabase.from('game_actions').insert({
       room_id: roomId,
       actor_username: 'mestre',
       target_username: null,
       card_key: null,
-      description: `Partida iniciada. Ordem aleatoria definida. Primeiro turno: ${firstName}.`,
+      description: `Partida iniciada. Ordem aleatoria definida. Primeiro turno: ${firstName}. ::RULESET:${ruleSetToken}`,
     });
   };
 
@@ -548,7 +603,7 @@ function App() {
   };
 
   const applyCardEffect = async () => {
-    if (!sessionUser || !selectedRoom || !selectedCard) return;
+    if (!sessionUser || !selectedRoom || !selectedCard || !selectedCardRule) return;
     if (selectedRoom.status !== 'running') return;
     if (currentTurnUsername !== sessionUser.username) {
       toast('Aguarde seu turno.');
@@ -569,7 +624,7 @@ function App() {
     }
 
     let target: RoomPlayer | undefined;
-    if ('requiresTarget' in selectedCard.effect && selectedCard.effect.requiresTarget) {
+    if ('requiresTarget' in selectedCardRule.effect && selectedCardRule.effect.requiresTarget) {
       target = map.get(cardTarget);
       if (!target) {
         toast('Selecione um alvo.');
@@ -581,7 +636,7 @@ function App() {
       player.chips = Math.max(0, player.chips + delta);
     };
 
-    const effect = selectedCard.effect;
+    const effect = selectedCardRule.effect;
     let wheelDelta: number | null = null;
 
     switch (effect.kind) {
@@ -711,12 +766,14 @@ function App() {
       const usedAfterPlay = new Set(usedCardIds);
       usedAfterPlay.add(selectedCard.id);
       if (!winner && usedAfterPlay.size >= TAROT_CARDS.length) {
+        const refreshedRuleSet = generateRandomRuleSet();
+        const refreshedToken = encodeRuleSet(refreshedRuleSet);
         const { error: resetDeckError } = await supabase.from('game_actions').insert({
           room_id: selectedRoom.id,
           actor_username: actor.username,
           target_username: null,
           card_key: null,
-          description: 'Todas as cartas foram usadas. O baralho foi renovado para uma nova rodada. ::DECK_RESET',
+          description: `Todas as cartas foram usadas. O baralho foi renovado para uma nova rodada. ::DECK_RESET ::RULESET:${refreshedToken}`,
         });
         if (resetDeckError) throw resetDeckError;
       }
@@ -1026,10 +1083,10 @@ function App() {
               <div className="modal-content">
                 <p className="eyebrow">{selectedCard.arcana}</p>
                 <h3>{selectedCard.name}</h3>
-                <p className="effect-highlight"><strong>Efeito:</strong> {selectedCard.effectText}</p>
-                <p className="meaning-italic">({selectedCard.meaning})</p>
+                <p className="effect-highlight"><strong>Efeito:</strong> {selectedCardRule?.effectText}</p>
+                <p className="meaning-italic">({selectedCardRule?.flavorText})</p>
 
-                {'requiresTarget' in selectedCard.effect && selectedCard.effect.requiresTarget && (
+                {selectedCardRule && 'requiresTarget' in selectedCardRule.effect && selectedCardRule.effect.requiresTarget && (
                   <select value={cardTarget} onChange={(event) => setCardTarget(event.target.value)}>
                     <option value="">Selecione o alvo</option>
                     {targetCandidates.map((candidate) => (

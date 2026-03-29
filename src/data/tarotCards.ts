@@ -7,9 +7,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Louco',
     symbol: '🎒',
     palette: ['#6b59cc', '#2f1f58'],
-    effect: { kind: 'self_delta', amount: 2 },
-    effectText: 'Recebe +2 fichas.',
-    meaning: 'Abertura para o novo e salto de fe que impulsiona o inicio da jornada.',
+    rules: [
+      { id: 'fool_1', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'O salto no vazio abre portas para um inicio explosivo.' },
+      { id: 'fool_2', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'A espontaneidade recompensa quem aceita o risco.' },
+      { id: 'fool_3', effect: { kind: 'both_delta', actorAmount: 2, targetAmount: 1, requiresTarget: true }, effectText: 'Voce ganha +2 e um alvo ganha +1.', flavorText: 'A aventura contagia outro viajante no caminho.' },
+    ],
   },
   {
     id: 'magician',
@@ -17,9 +19,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Mago',
     symbol: '🪄',
     palette: ['#9a4bd8', '#3a1f4f'],
-    effect: { kind: 'steal', amount: 2, requiresTarget: true },
-    effectText: 'Rouba ate 2 fichas de um alvo.',
-    meaning: 'Poder de manifestacao e dominio da vontade para moldar o destino.',
+    rules: [
+      { id: 'magician_1', effect: { kind: 'steal', amount: 3, requiresTarget: true }, effectText: 'Rouba ate 3 fichas de um alvo.', flavorText: 'A vontade molda a materia e puxa poder de outro destino.' },
+      { id: 'magician_2', effect: { kind: 'steal', amount: 2, requiresTarget: true }, effectText: 'Rouba ate 2 fichas de um alvo.', flavorText: 'Com tecnica precisa, o arcano converte energia em vantagem.' },
+      { id: 'magician_3', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'Seu foco absoluto gera resultado imediato.' },
+    ],
   },
   {
     id: 'priestess',
@@ -27,9 +31,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Sacerdotisa',
     symbol: '🌙',
     palette: ['#466ed8', '#172447'],
-    effect: { kind: 'target_delta', amount: -1, requiresTarget: true },
-    effectText: 'Um alvo perde 1 ficha.',
-    meaning: 'Intuicao, misterio e leitura do invisivel para desestabilizar o adversario.',
+    rules: [
+      { id: 'priestess_1', effect: { kind: 'target_delta', amount: -2, requiresTarget: true }, effectText: 'Um alvo perde ate 2 fichas.', flavorText: 'A intuicao da noite revela a fraqueza oculta do rival.' },
+      { id: 'priestess_2', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'Segredos bem guardados fortalecem sua trilha.' },
+      { id: 'priestess_3', effect: { kind: 'both_delta', actorAmount: 2, targetAmount: 0, requiresTarget: true }, effectText: 'Voce ganha +2 ao mirar um alvo.', flavorText: 'O silencio oracular drena a confianca alheia sem ruido.' },
+    ],
   },
   {
     id: 'empress',
@@ -37,9 +43,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Imperatriz',
     symbol: '👑',
     palette: ['#d3659a', '#511d3c'],
-    effect: { kind: 'self_delta', amount: 1 },
-    effectText: 'Recebe +1 ficha.',
-    meaning: 'Abundancia e crescimento continuo que alimentam sua trilha.',
+    rules: [
+      { id: 'empress_1', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'Abundancia plena floresce em sua mesa.' },
+      { id: 'empress_2', effect: { kind: 'both_delta', actorAmount: 2, targetAmount: 1, requiresTarget: true }, effectText: 'Voce ganha +2 e um alvo ganha +1.', flavorText: 'Prosperidade compartilhada multiplica sua influencia.' },
+      { id: 'empress_3', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'A fertilidade do arcano sustenta seu crescimento.' },
+    ],
   },
   {
     id: 'emperor',
@@ -47,9 +55,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Imperador',
     symbol: '🛡️',
     palette: ['#d09b50', '#4f3113'],
-    effect: { kind: 'target_delta', amount: -2, requiresTarget: true },
-    effectText: 'Um alvo perde ate 2 fichas.',
-    meaning: 'Ordem, autoridade e controle para limitar o avanco dos rivais.',
+    rules: [
+      { id: 'emperor_1', effect: { kind: 'target_delta', amount: -3, requiresTarget: true }, effectText: 'Um alvo perde ate 3 fichas.', flavorText: 'A ordem imperial corta excessos sem piedade.' },
+      { id: 'emperor_2', effect: { kind: 'target_delta', amount: -2, requiresTarget: true }, effectText: 'Um alvo perde ate 2 fichas.', flavorText: 'A autoridade imposta limita o avancar rival.' },
+      { id: 'emperor_3', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'Ao consolidar territorio, voce se fortalece.' },
+    ],
   },
   {
     id: 'hierophant',
@@ -57,9 +67,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Alto Sacerdote (Papa)',
     symbol: '⛪',
     palette: ['#7ec7be', '#20403e'],
-    effect: { kind: 'give', amount: 1, requiresTarget: true },
-    effectText: 'Doa 1 ficha para um alvo.',
-    meaning: 'Tradicao, pacto e sabedoria ritual para fortalecer aliancas.',
+    rules: [
+      { id: 'hierophant_1', effect: { kind: 'both_delta', actorAmount: 2, targetAmount: 2, requiresTarget: true }, effectText: 'Voce e um alvo recebem +2 fichas.', flavorText: 'A benção ritual une destinos em alta energia.' },
+      { id: 'hierophant_2', effect: { kind: 'give', amount: 1, requiresTarget: true }, effectText: 'Doe 1 ficha para um alvo.', flavorText: 'O sacrificio consciente prepara um retorno maior.' },
+      { id: 'hierophant_3', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'A doutrina interior ancora seu progresso.' },
+    ],
   },
   {
     id: 'lovers',
@@ -67,9 +79,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'Os Enamorados',
     symbol: '💞',
     palette: ['#d282b4', '#4c1d3b'],
-    effect: { kind: 'both_delta', actorAmount: 1, targetAmount: 1, requiresTarget: true },
-    effectText: 'Voce e um alvo recebem +1 ficha.',
-    meaning: 'Escolha e conexao que produzem ganho compartilhado.',
+    rules: [
+      { id: 'lovers_1', effect: { kind: 'both_delta', actorAmount: 2, targetAmount: 2, requiresTarget: true }, effectText: 'Voce e um alvo recebem +2 fichas.', flavorText: 'A afinidade certa cria ganho duplo.' },
+      { id: 'lovers_2', effect: { kind: 'both_delta', actorAmount: 3, targetAmount: 1, requiresTarget: true }, effectText: 'Voce ganha +3 e um alvo +1.', flavorText: 'Uma escolha amorosa favorece seu destino.' },
+      { id: 'lovers_3', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'A decisao alinhada ao coracao acelera sua trilha.' },
+    ],
   },
   {
     id: 'chariot',
@@ -77,9 +91,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Carro',
     symbol: '🏇',
     palette: ['#5c95df', '#1e3359'],
-    effect: { kind: 'self_delta', amount: 3 },
-    effectText: 'Recebe +3 fichas.',
-    meaning: 'Movimento, foco e conquista para abrir vantagem rapida.',
+    rules: [
+      { id: 'chariot_1', effect: { kind: 'self_delta', amount: 4 }, effectText: 'Recebe +4 fichas.', flavorText: 'Controle total e velocidade rumo ao topo.' },
+      { id: 'chariot_2', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'Determinacao firme abre distancia no placar.' },
+      { id: 'chariot_3', effect: { kind: 'target_delta', amount: -1, requiresTarget: true }, effectText: 'Voce avanca e um alvo perde 1 ficha.', flavorText: 'Seu avanço empurra outro para tras.' },
+    ],
   },
   {
     id: 'strength',
@@ -87,9 +103,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Forca',
     symbol: '🦁',
     palette: ['#de8d58', '#5c2c14'],
-    effect: { kind: 'actor_gain_from_all', amountEach: 1 },
-    effectText: 'Rouba 1 ficha de cada oponente.',
-    meaning: 'Coragem serena e dominio interior sobre as tensoes da mesa.',
+    rules: [
+      { id: 'strength_1', effect: { kind: 'actor_gain_from_all', amountEach: 1 }, effectText: 'Rouba 1 ficha de cada oponente.', flavorText: 'A firmeza interior domina o caos ao redor.' },
+      { id: 'strength_2', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'Autodomínio converte pressão em poder.' },
+      { id: 'strength_3', effect: { kind: 'steal', amount: 2, requiresTarget: true }, effectText: 'Rouba ate 2 fichas de um alvo.', flavorText: 'A coragem serena vence sem hesitar.' },
+    ],
   },
   {
     id: 'hermit',
@@ -97,9 +115,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Eremita',
     symbol: '🕯️',
     palette: ['#99887a', '#2e2924'],
-    effect: { kind: 'self_and_others', actorAmount: 1, othersAmount: -1 },
-    effectText: 'Voce ganha +1 e os demais perdem 1.',
-    meaning: 'Recolhimento estrategico que ilumina seu caminho e obscurece o dos outros.',
+    rules: [
+      { id: 'hermit_1', effect: { kind: 'self_and_others', actorAmount: 2, othersAmount: -1 }, effectText: 'Voce ganha +2 e os demais perdem 1.', flavorText: 'A luz interior enfraquece as rotas externas.' },
+      { id: 'hermit_2', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'A sabedoria recolhida rende frutos concretos.' },
+      { id: 'hermit_3', effect: { kind: 'target_delta', amount: -2, requiresTarget: true }, effectText: 'Um alvo perde ate 2 fichas.', flavorText: 'Seu farol aponta exatamente a brecha rival.' },
+    ],
   },
   {
     id: 'wheel',
@@ -107,9 +127,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Roda da Fortuna',
     symbol: '🎡',
     palette: ['#e0ad6e', '#5d3c1b'],
-    effect: { kind: 'random_actor_delta', min: -2, max: 3 },
-    effectText: 'Sorte aleatoria: perde 2 ou ganha ate 3.',
-    meaning: 'Ciclos do destino que sobem e descem sem aviso.',
+    rules: [
+      { id: 'wheel_1', effect: { kind: 'random_actor_delta', min: -1, max: 4 }, effectText: 'Roleta: perde 1 ou ganha ate 4.', flavorText: 'A virada do destino tende a sorrir para os ousados.' },
+      { id: 'wheel_2', effect: { kind: 'random_actor_delta', min: -2, max: 5 }, effectText: 'Roleta: perde 2 ou ganha ate 5.', flavorText: 'O risco extremo pode entregar gloria imediata.' },
+      { id: 'wheel_3', effect: { kind: 'random_actor_delta', min: 0, max: 4 }, effectText: 'Roleta: de 0 a +4 fichas.', flavorText: 'Quando a sorte estabiliza, o crescimento ainda vem.' },
+    ],
   },
   {
     id: 'justice',
@@ -117,9 +139,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Justica',
     symbol: '⚖️',
     palette: ['#b86fd4', '#382044'],
-    effect: { kind: 'richest_to_actor', amount: 2 },
-    effectText: 'O mais rico perde ate 2 fichas; voce ganha o mesmo.',
-    meaning: 'Equilibrio karmico que redistribui o excesso acumulado.',
+    rules: [
+      { id: 'justice_1', effect: { kind: 'richest_to_actor', amount: 3 }, effectText: 'O mais rico perde ate 3 fichas e voce ganha o mesmo.', flavorText: 'A balança corrige o excesso em favor do equilibrio.' },
+      { id: 'justice_2', effect: { kind: 'richest_to_actor', amount: 2 }, effectText: 'O mais rico perde ate 2 fichas e voce ganha o mesmo.', flavorText: 'Toda vantagem exagerada encontra ajuste.' },
+      { id: 'justice_3', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'Ao julgar com clareza, sua trilha ganha consistencia.' },
+    ],
   },
   {
     id: 'hanged_man',
@@ -127,9 +151,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Enforcado',
     symbol: '🙃',
     palette: ['#5c8cb9', '#233349'],
-    effect: { kind: 'target_delta', amount: -2, requiresTarget: true },
-    effectText: 'Um alvo perde ate 2 fichas.',
-    meaning: 'Pausa, sacrificio e mudanca de perspectiva para travar o oponente.',
+    rules: [
+      { id: 'hanged_man_1', effect: { kind: 'target_delta', amount: -3, requiresTarget: true }, effectText: 'Um alvo perde ate 3 fichas.', flavorText: 'A inversao de perspectiva paralisa o oponente.' },
+      { id: 'hanged_man_2', effect: { kind: 'target_delta', amount: -2, requiresTarget: true }, effectText: 'Um alvo perde ate 2 fichas.', flavorText: 'A suspensão força o rival a ceder terreno.' },
+      { id: 'hanged_man_3', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'No sacrificio, voce encontra ganho inesperado.' },
+    ],
   },
   {
     id: 'death',
@@ -137,9 +163,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Morte',
     symbol: '💀',
     palette: ['#7e7b8c', '#2f2d3f'],
-    effect: { kind: 'all_delta', amount: -1 },
-    effectText: 'Todos os jogadores perdem 1 ficha.',
-    meaning: 'Fim de ciclo e transformacao inevitavel que limpa o tabuleiro.',
+    rules: [
+      { id: 'death_1', effect: { kind: 'all_delta', amount: -1 }, effectText: 'Todos perdem 1 ficha.', flavorText: 'Um ciclo termina para abrir outro com nova forma.' },
+      { id: 'death_2', effect: { kind: 'target_delta', amount: -3, requiresTarget: true }, effectText: 'Um alvo perde ate 3 fichas.', flavorText: 'A transformação atinge quem mais resiste.' },
+      { id: 'death_3', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'Ao renascer, sua energia retorna em escala maior.' },
+    ],
   },
   {
     id: 'temperance',
@@ -147,9 +175,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Temperanca',
     symbol: '🕊️',
     palette: ['#7dc4d4', '#225268'],
-    effect: { kind: 'both_delta', actorAmount: 1, targetAmount: 2, requiresTarget: true },
-    effectText: 'Voce ganha +1 e um alvo ganha +2 fichas.',
-    meaning: 'Harmonia e alquimia de forcas para estabilizar a partida.',
+    rules: [
+      { id: 'temperance_1', effect: { kind: 'both_delta', actorAmount: 2, targetAmount: 2, requiresTarget: true }, effectText: 'Voce e um alvo recebem +2 fichas.', flavorText: 'A mistura certa harmoniza dois destinos.' },
+      { id: 'temperance_2', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'Equilibrio interno gera fluxo constante de ganho.' },
+      { id: 'temperance_3', effect: { kind: 'both_delta', actorAmount: 1, targetAmount: 3, requiresTarget: true }, effectText: 'Voce ganha +1 e um alvo +3.', flavorText: 'Ao dosar extremos, a mesa se reorganiza.' },
+    ],
   },
   {
     id: 'devil',
@@ -157,9 +187,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Diabo',
     symbol: '😈',
     palette: ['#b24646', '#4b1717'],
-    effect: { kind: 'steal', amount: 3, requiresTarget: true },
-    effectText: 'Rouba ate 3 fichas de um alvo.',
-    meaning: 'Apego, tentacao e ambicao bruta para arrancar poder do rival.',
+    rules: [
+      { id: 'devil_1', effect: { kind: 'steal', amount: 4, requiresTarget: true }, effectText: 'Rouba ate 4 fichas de um alvo.', flavorText: 'O desejo sem freio toma aquilo que cobiça.' },
+      { id: 'devil_2', effect: { kind: 'steal', amount: 3, requiresTarget: true }, effectText: 'Rouba ate 3 fichas de um alvo.', flavorText: 'A tentacao captura recursos com agressividade.' },
+      { id: 'devil_3', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'A sombra aceita em si vira combustivel de poder.' },
+    ],
   },
   {
     id: 'tower',
@@ -167,9 +199,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Torre',
     symbol: '⛈️',
     palette: ['#7e83df', '#262a64'],
-    effect: { kind: 'all_delta', amount: -2 },
-    effectText: 'Todos perdem ate 2 fichas.',
-    meaning: 'Ruptura e queda subita de estruturas instaveis.',
+    rules: [
+      { id: 'tower_1', effect: { kind: 'all_delta', amount: -2 }, effectText: 'Todos perdem ate 2 fichas.', flavorText: 'A queda brusca derruba estruturas frágeis da rodada.' },
+      { id: 'tower_2', effect: { kind: 'target_delta', amount: -4, requiresTarget: true }, effectText: 'Um alvo perde ate 4 fichas.', flavorText: 'O raio acerta em cheio quem está no topo.' },
+      { id: 'tower_3', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'Depois do caos, voce encontra espaço para crescer.' },
+    ],
   },
   {
     id: 'star',
@@ -177,9 +211,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Estrela',
     symbol: '⭐',
     palette: ['#78b8ff', '#2c4f7c'],
-    effect: { kind: 'self_delta', amount: 2 },
-    effectText: 'Recebe +2 fichas.',
-    meaning: 'Esperanca, cura e confianca para retomar o brilho da jornada.',
+    rules: [
+      { id: 'star_1', effect: { kind: 'self_delta', amount: 4 }, effectText: 'Recebe +4 fichas.', flavorText: 'Esperanca renovada ilumina seu proximo grande salto.' },
+      { id: 'star_2', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'A inspiração do céu devolve sua confiança.' },
+      { id: 'star_3', effect: { kind: 'both_delta', actorAmount: 3, targetAmount: 1, requiresTarget: true }, effectText: 'Voce ganha +3 e um alvo +1.', flavorText: 'Seu brilho contagia quem orbita seu caminho.' },
+    ],
   },
   {
     id: 'moon',
@@ -187,9 +223,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'A Lua',
     symbol: '🌘',
     palette: ['#4f67c0', '#1f2c61'],
-    effect: { kind: 'target_delta', amount: -1, requiresTarget: true },
-    effectText: 'Um alvo perde 1 ficha.',
-    meaning: 'Sombras, medo e intuicao profunda que confundem os caminhos.',
+    rules: [
+      { id: 'moon_1', effect: { kind: 'target_delta', amount: -2, requiresTarget: true }, effectText: 'Um alvo perde ate 2 fichas.', flavorText: 'As sombras confundem o rival e minam seu passo.' },
+      { id: 'moon_2', effect: { kind: 'self_delta', amount: 2 }, effectText: 'Recebe +2 fichas.', flavorText: 'Sua intuicao navega a neblina com vantagem.' },
+      { id: 'moon_3', effect: { kind: 'actor_gain_from_all', amountEach: 1 }, effectText: 'Rouba 1 ficha de cada oponente.', flavorText: 'A maré lunar puxa recursos de toda a mesa.' },
+    ],
   },
   {
     id: 'sun',
@@ -197,9 +235,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Sol',
     symbol: '☀️',
     palette: ['#f4bd53', '#5b3f17'],
-    effect: { kind: 'both_delta', actorAmount: 2, targetAmount: 1, requiresTarget: true },
-    effectText: 'Voce ganha +2 e um alvo ganha +1.',
-    meaning: 'Clareza e vitalidade que iluminam acordos e progresso.',
+    rules: [
+      { id: 'sun_1', effect: { kind: 'self_delta', amount: 4 }, effectText: 'Recebe +4 fichas.', flavorText: 'Clareza total e energia máxima para disparar no placar.' },
+      { id: 'sun_2', effect: { kind: 'both_delta', actorAmount: 3, targetAmount: 2, requiresTarget: true }, effectText: 'Voce ganha +3 e um alvo +2.', flavorText: 'Luz e calor levantam o ritmo da partida.' },
+      { id: 'sun_3', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'Vitalidade radiante transforma ação em progresso.' },
+    ],
   },
   {
     id: 'judgement',
@@ -207,9 +247,11 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Julgamento',
     symbol: '📯',
     palette: ['#5fa7b2', '#1a3a42'],
-    effect: { kind: 'all_delta', amount: 1 },
-    effectText: 'Todos ganham +1 ficha.',
-    meaning: 'Chamado final para despertar e renovar as forcas coletivas.',
+    rules: [
+      { id: 'judgement_1', effect: { kind: 'all_delta', amount: 2 }, effectText: 'Todos ganham +2 fichas.', flavorText: 'O chamado final reanima toda a mesa com força.' },
+      { id: 'judgement_2', effect: { kind: 'all_delta', amount: 1 }, effectText: 'Todos ganham +1 ficha.', flavorText: 'Acordar coletivo para um novo ciclo de escolhas.' },
+      { id: 'judgement_3', effect: { kind: 'self_delta', amount: 3 }, effectText: 'Recebe +3 fichas.', flavorText: 'Seu renascimento pessoal acelera a reta final.' },
+    ],
   },
   {
     id: 'world',
@@ -217,8 +259,10 @@ export const TAROT_CARDS: TarotCard[] = [
     name: 'O Mundo',
     symbol: '🌍',
     palette: ['#66c58d', '#1e4b2f'],
-    effect: { kind: 'self_delta', amount: 4 },
-    effectText: 'Recebe +4 fichas.',
-    meaning: 'Conclusao, plenitude e coroacao da jornada arcana.',
+    rules: [
+      { id: 'world_1', effect: { kind: 'self_delta', amount: 5 }, effectText: 'Recebe +5 fichas.', flavorText: 'A conclusao perfeita entrega recompensa suprema.' },
+      { id: 'world_2', effect: { kind: 'self_delta', amount: 4 }, effectText: 'Recebe +4 fichas.', flavorText: 'A jornada completada abre a porta da vitória.' },
+      { id: 'world_3', effect: { kind: 'both_delta', actorAmount: 4, targetAmount: 1, requiresTarget: true }, effectText: 'Voce ganha +4 e um alvo +1.', flavorText: 'Seu ciclo fecha em plenitude e influência.' },
+    ],
   },
 ];
