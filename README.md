@@ -21,6 +21,7 @@ Dashboard web em tempo real para noite de jogos usando React + Supabase.
 - Turno em tempo real: quem joga agora e quem joga depois.
 - Fluxo de mesa fisica: cada jogador inicia com 1 ponto e sem cartas; no turno, registra no dashboard a carta puxada no baralho real.
 - A carta registrada entra na mao do jogador, tem efeito aplicado e, ao atingir 5 cartas na mao, o jogador descarta 1 para a pilha de descarte.
+- Quando o deck acabar sem vencedor, o ciclo reinicia com novo embaralhamento.
 - Cartas do tarot com visual mistico, efeito e leitura simbolica.
 - Fichas atualizadas ao vivo para todos os celulares.
 - Vitoria ao chegar em 10 fichas.

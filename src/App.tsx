@@ -943,6 +943,17 @@ function App() {
         return state.hands[username];
       };
 
+      const discardFirstCardById = (username: string, cardId: string, reason: string) => {
+        const hand = handFor(username);
+        const idx = hand.findIndex((entry) => entry.cardId === cardId);
+        if (idx < 0) return false;
+        const [removed] = hand.splice(idx, 1);
+        if (!removed) return false;
+        discardCard(removed);
+        details.push(reason);
+        return true;
+      };
+
       const applyPointDelta = (username: string, delta: number, visited = new Set<string>()) => {
         const player = playersMap.get(username);
         if (!player) return 0;
@@ -956,6 +967,7 @@ function App() {
 
         const status = ensureStatus(state, username);
         if (status.loversLink?.pending) {
+          const owner = status.loversLink.owner;
           const partner = status.loversLink.partner;
           status.loversLink = { ...status.loversLink, pending: false };
           const partnerStatus = ensureStatus(state, partner);
@@ -965,6 +977,11 @@ function App() {
           if (partner !== username) {
             applyPointDelta(partner, applied, visited);
           }
+          discardFirstCardById(
+            owner,
+            'lovers',
+            `${displayName(owner)} ativou o segredo dos Amantes e descartou a carta Os Amantes.`
+          );
         }
 
         return applied;
@@ -1042,13 +1059,25 @@ function App() {
           return { blocked: true, finalTarget: targetUsername, note: `${displayName(targetUsername)} estava protegido e anulou o efeito.` };
         }
 
-        if (status.emperorShield) {
-          status.emperorShield = false;
+        if (status.emperorShield?.active) {
+          const owner = status.emperorShield.owner;
+          status.emperorShield = undefined;
+          discardFirstCardById(
+            owner,
+            'emperor',
+            `${displayName(owner)} ativou o Escudo do Imperador e descartou O Imperador.`
+          );
           return { blocked: true, finalTarget: targetUsername, note: `Escudo imperial de ${displayName(targetUsername)} bloqueou o alvo.` };
         }
 
-        if (status.emperorReflect) {
-          status.emperorReflect = false;
+        if (status.emperorReflect?.active) {
+          const owner = status.emperorReflect.owner;
+          status.emperorReflect = undefined;
+          discardFirstCardById(
+            owner,
+            'emperor',
+            `${displayName(owner)} ativou o Reflexo do Imperador e descartou O Imperador.`
+          );
           return {
             blocked: false,
             finalTarget: sourceUsername,
@@ -1078,9 +1107,15 @@ function App() {
 
         if (finalTarget !== sourceUsername) {
           const targetStatus = ensureStatus(state, finalTarget);
-          if (targetStatus.chariotRetaliation) {
-            targetStatus.chariotRetaliation = false;
+          if (targetStatus.chariotRetaliation?.active) {
+            const owner = targetStatus.chariotRetaliation.owner;
+            targetStatus.chariotRetaliation = undefined;
             forceNextPlayer = finalTarget;
+            discardFirstCardById(
+              owner,
+              'chariot',
+              `${displayName(owner)} ativou a retaliacao da Carruagem e descartou A Carruagem.`
+            );
             details.push(`${displayName(finalTarget)} ativou a retaliacao da Carruagem e tomou o proximo turno.`);
           }
         }
@@ -1118,6 +1153,18 @@ function App() {
         const descByPoints = () => [...activePlayers()].sort((a, b) => b.chips - a.chips);
         const ascByHand = () => [...activePlayers()].sort((a, b) => handFor(a.username).length - handFor(b.username).length);
         const descByHand = () => [...activePlayers()].sort((a, b) => handFor(b.username).length - handFor(a.username).length);
+        const sourceHand = handFor(sourceUsername);
+        const hasEmperorInHand = sourceHand.some((entry) => entry.cardId === 'emperor');
+        const hasSunInHand = sourceHand.some((entry) => entry.cardId === 'sun');
+
+        if (_card.group !== 'major' && _card.rank === 'Rei' && hasEmperorInHand) {
+          applyPointDelta(sourceUsername, 1);
+          details.push('Easter egg: Rei aliado ao Imperador concedeu +1 ponto.');
+        }
+        if (_card.group === 'pentacles' && hasSunInHand) {
+          applyPointDelta(sourceUsername, 1);
+          details.push('Easter egg: Ouro sob o Sol concedeu +1 ponto.');
+        }
 
         switch (effect.kind) {
           case 'fool_h1': {
@@ -1220,13 +1267,13 @@ function App() {
           }
           case 'emperor_h1': {
             applyPointDelta(sourceUsername, 3);
-            ensureStatus(state, sourceUsername).emperorShield = true;
+            ensureStatus(state, sourceUsername).emperorShield = { active: true, owner: sourceUsername };
             details.push('Escudo secreto do Imperador ativado.');
             break;
           }
           case 'emperor_h2': {
             applyPointDelta(sourceUsername, 3);
-            ensureStatus(state, sourceUsername).emperorReflect = true;
+            ensureStatus(state, sourceUsername).emperorReflect = { active: true, owner: sourceUsername };
             details.push('Reflexo secreto do Imperador ativado.');
             break;
           }
@@ -1245,8 +1292,8 @@ function App() {
             if (!target) break;
             applyPointDelta(sourceUsername, 2);
             applyPointDelta(target, 2);
-            ensureStatus(state, sourceUsername).loversLink = { partner: target, type: 'points', pending: true };
-            ensureStatus(state, target).loversLink = { partner: sourceUsername, type: 'points', pending: true };
+            ensureStatus(state, sourceUsername).loversLink = { partner: target, type: 'points', pending: true, owner: sourceUsername };
+            ensureStatus(state, target).loversLink = { partner: sourceUsername, type: 'points', pending: true, owner: sourceUsername };
             details.push(`${displayName(sourceUsername)} e ${displayName(target)} selaram um elo de pontos.`);
             break;
           }
@@ -1257,8 +1304,8 @@ function App() {
             const targetStatus = ensureStatus(state, target);
             sourceStatus.extraDrawNextTurn = safeNumber(sourceStatus.extraDrawNextTurn) + 1;
             targetStatus.extraDrawNextTurn = safeNumber(targetStatus.extraDrawNextTurn) + 1;
-            sourceStatus.loversLink = { partner: target, type: 'draw', pending: true };
-            targetStatus.loversLink = { partner: sourceUsername, type: 'draw', pending: true };
+            sourceStatus.loversLink = { partner: target, type: 'draw', pending: true, owner: sourceUsername };
+            targetStatus.loversLink = { partner: sourceUsername, type: 'draw', pending: true, owner: sourceUsername };
             details.push(`${displayName(sourceUsername)} e ${displayName(target)} receberao compra extra no proximo turno.`);
             break;
           }
@@ -1270,7 +1317,7 @@ function App() {
           }
           case 'chariot_h2': {
             applyPointDelta(sourceUsername, 3);
-            ensureStatus(state, sourceUsername).chariotRetaliation = true;
+            ensureStatus(state, sourceUsername).chariotRetaliation = { active: true, owner: sourceUsername };
             details.push('Retaliacao secreta da Carruagem armada.');
             break;
           }
@@ -1594,7 +1641,7 @@ function App() {
             if (!target) break;
             const amount = safeNumber(effect.amount, 1);
             applyTargetDelta(sourceUsername, target, -amount, true);
-            details.push('Ouros transferiram valor entre os dois jogadores.');
+            details.push(`${displayName(sourceUsername)} roubou pontos de ${displayName(target)} com Ouros.`);
             break;
           }
           case 'minor_wands_draw_or_turn': {

@@ -81,10 +81,10 @@ export interface DeckCard {
 }
 
 export interface PlayerStatus {
-  emperorShield?: boolean;
-  emperorReflect?: boolean;
-  loversLink?: { partner: string; type: 'points' | 'draw'; pending: boolean };
-  chariotRetaliation?: boolean;
+  emperorShield?: { active: boolean; owner: string };
+  emperorReflect?: { active: boolean; owner: string };
+  loversLink?: { partner: string; type: 'points' | 'draw'; pending: boolean; owner: string };
+  chariotRetaliation?: { active: boolean; owner: string };
   targetImmunityUntilNextTurn?: boolean;
   skipTurns?: number;
   onResumePointDelta?: number;

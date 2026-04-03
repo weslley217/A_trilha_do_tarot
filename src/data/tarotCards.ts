@@ -18,7 +18,7 @@ const MAJOR_ARCANA: TarotCard[] = [
       {
         id: 'fool_h2',
         effect: { kind: 'fool_h2' },
-        effectText: 'Troque mao e pontos com um jogador; os demais voltam para 1 ponto e reembaralham as maos.',
+        effectText: 'Tome a mao e os pontos de um jogador; os demais perdem pontos ate 1 e reembaralham as maos.',
         flavorText: 'A troca de papeis desmonta certezas e abre uma nova trilha.',
         targetCount: 1,
       },
@@ -548,7 +548,7 @@ function buildMinorRule(suit: keyof typeof suitMeta, rank: string): TarotCardRul
     return {
       id: `minor_${suit}_${rank}`,
       effect: { kind: 'minor_pentacles_trade', amount: intensity + 1 },
-      effectText: `Troque ate ${intensity + 1} pontos com um alvo.`,
+      effectText: `Roube ate ${intensity + 1} pontos de um alvo.`,
       flavorText: 'Os ouros movimentam valor e mudam a balança do jogo.',
       targetCount: 1,
     };
@@ -581,3 +581,4 @@ const MINOR_ARCANA: TarotCard[] = (Object.keys(suitMeta) as Array<keyof typeof s
 
 export const TAROT_CARDS: TarotCard[] = [...MAJOR_ARCANA, ...MINOR_ARCANA];
 export const MAJOR_ARCANA_IDS = new Set(MAJOR_ARCANA.map((card) => card.id));
+
