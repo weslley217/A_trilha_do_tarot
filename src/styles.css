@@ -257,6 +257,32 @@ button:disabled {
   gap: 10px;
 }
 
+.tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+
+.tab-btn {
+  padding: 6px 10px;
+  font-size: 0.84rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.tab-btn.active {
+  background: linear-gradient(135deg, #c99845, #f0cf8c);
+  color: #28184a;
+}
+
+.hand-reveal-list {
+  display: grid;
+  gap: 2px;
+  margin-top: 6px;
+}
+
 .cards-grid {
   margin-top: 10px;
   display: grid;

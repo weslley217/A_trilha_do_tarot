@@ -1,6 +1,8 @@
 export type UserRole = 'master' | 'player';
 
 export type RoomStatus = 'waiting' | 'running' | 'finished';
+export type GameMode = 'short' | 'long';
+export type CardGroup = 'major' | 'wands' | 'cups' | 'swords' | 'pentacles';
 
 export interface InternalUser {
   username: string;
@@ -15,6 +17,8 @@ export interface GameRoom {
   id: string;
   name: string;
   status: RoomStatus;
+  game_mode?: GameMode;
+  game_state?: GameState | null;
   turn_order: string[];
   current_turn_index: number;
   winner_username: string | null;
@@ -44,17 +48,10 @@ export interface GameAction {
   created_at: string;
 }
 
-export type CardEffect =
-  | { kind: 'self_delta'; amount: number }
-  | { kind: 'target_delta'; amount: number; requiresTarget: true }
-  | { kind: 'steal'; amount: number; requiresTarget: true }
-  | { kind: 'give'; amount: number; requiresTarget: true }
-  | { kind: 'both_delta'; actorAmount: number; targetAmount: number; requiresTarget: true }
-  | { kind: 'richest_to_actor'; amount: number }
-  | { kind: 'self_and_others'; actorAmount: number; othersAmount: number }
-  | { kind: 'random_actor_delta'; min: number; max: number }
-  | { kind: 'actor_gain_from_all'; amountEach: number }
-  | { kind: 'all_delta'; amount: number };
+export type CardEffect = {
+  kind: string;
+  [key: string]: unknown;
+};
 
 export interface TarotCard {
   id: string;
@@ -62,6 +59,9 @@ export interface TarotCard {
   name: string;
   symbol: string;
   palette: [string, string];
+  group?: CardGroup;
+  suit?: string;
+  rank?: string;
   rules: TarotCardRule[];
 }
 
@@ -70,5 +70,35 @@ export interface TarotCardRule {
   effect: CardEffect;
   effectText: string;
   flavorText: string;
+  targetCount?: number;
+  requiresOrderSelection?: boolean;
+  isSecret?: boolean;
+}
+
+export interface DeckCard {
+  uid: string;
+  cardId: string;
+}
+
+export interface PlayerStatus {
+  emperorShield?: boolean;
+  emperorReflect?: boolean;
+  loversLink?: { partner: string; type: 'points' | 'draw'; pending: boolean };
+  chariotRetaliation?: boolean;
+  targetImmunityUntilNextTurn?: boolean;
+  skipTurns?: number;
+  onResumePointDelta?: number;
+  pendingPointPenaltyNextTurn?: number;
+  extraDrawNextTurn?: number;
+  isOut?: boolean;
+}
+
+export interface GameState {
+  mode: GameMode;
+  drawPile: DeckCard[];
+  discardPile: DeckCard[];
+  hands: Record<string, DeckCard[]>;
+  statuses: Record<string, PlayerStatus>;
+  currentCycle: number;
 }
 

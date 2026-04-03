@@ -27,6 +27,8 @@ create table public.internal_users (
 create table public.game_rooms (
   id uuid primary key default gen_random_uuid(),
   name text not null unique,
+  game_mode text not null default 'short' check (game_mode in ('short', 'long')),
+  game_state jsonb not null default '{}'::jsonb,
   status text not null default 'waiting' check (status in ('waiting', 'running', 'finished')),
   turn_order text[] not null default '{}',
   current_turn_index integer not null default 0,
@@ -97,8 +99,8 @@ set
   active = excluded.active;
 
 with room_seed as (
-  insert into public.game_rooms (name, created_by, status, turn_order, current_turn_index)
-  values ('Sessao Principal', 'mestre', 'waiting', '{}', 0)
+  insert into public.game_rooms (name, created_by, game_mode, game_state, status, turn_order, current_turn_index)
+  values ('Sessao Principal', 'mestre', 'short', '{}'::jsonb, 'waiting', '{}', 0)
   on conflict (name) do update
   set updated_at = now()
   returning id
