@@ -18,7 +18,7 @@ import { MAJOR_ARCANA_IDS, TAROT_CARDS } from './data/tarotCards';
 
 const WIN_TARGET = 10;
 const SESSION_KEY = 'tarot-session-user-v1';
-const INITIAL_HAND_DRAW = 3;
+const INITIAL_HAND_DRAW = 0;
 const WHEEL_SLOTS = [-3, -2, -1, 1, 2, 3, 4, 5, 6];
 
 const HAND_TABS: Array<{ id: 'all' | CardGroup; label: string }> = [
@@ -214,6 +214,7 @@ function App() {
   const [selectedRule, setSelectedRule] = useState<TarotCardRule | null>(null);
   const [selectedTargetA, setSelectedTargetA] = useState('');
   const [selectedTargetB, setSelectedTargetB] = useState('');
+  const [selectedDiscardUid, setSelectedDiscardUid] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<string[]>([]);
   const [handTab, setHandTab] = useState<'all' | CardGroup>('all');
   const [revealedHands, setRevealedHands] = useState<Record<string, boolean>>({});
@@ -308,21 +309,21 @@ function App() {
     return gameState.hands[sessionUser.username] ?? [];
   }, [gameState.hands, sessionUser]);
 
-  const myHandCards = useMemo(() => {
-    return myHandInstances
+  const availableDeckCards = useMemo(() => {
+    return gameState.drawPile
       .map((instance) => ({ instance, card: cardsById.get(instance.cardId) }))
       .filter((entry): entry is { instance: DeckCard; card: TarotCard } => Boolean(entry.card))
       .filter((entry) => (handTab === 'all' ? true : entry.card.group === handTab));
-  }, [cardsById, handTab, myHandInstances]);
+  }, [cardsById, gameState.drawPile, handTab]);
 
   const selectedCard = useMemo(() => {
     if (!selectedCardUid) return null;
-    const found = myHandInstances.find((item) => item.uid === selectedCardUid);
+    const found = gameState.drawPile.find((item) => item.uid === selectedCardUid);
     if (!found) return null;
     const card = cardsById.get(found.cardId);
     if (!card) return null;
     return { instance: found, card };
-  }, [cardsById, myHandInstances, selectedCardUid]);
+  }, [cardsById, gameState.drawPile, selectedCardUid]);
 
   const liveAnimationAction = useMemo(() => {
     if (liveAnimationActionId == null) return null;
@@ -500,15 +501,16 @@ function App() {
 
   useEffect(() => {
     if (!selectedCardUid) return;
-    const stillExists = myHandInstances.some((entry) => entry.uid === selectedCardUid);
+    const stillExists = gameState.drawPile.some((entry) => entry.uid === selectedCardUid);
     if (!stillExists) {
       setSelectedCardUid(null);
       setSelectedRule(null);
       setSelectedTargetA('');
       setSelectedTargetB('');
+      setSelectedDiscardUid('');
       setSelectedOrder([]);
     }
-  }, [myHandInstances, selectedCardUid]);
+  }, [gameState.drawPile, selectedCardUid]);
 
   useEffect(() => {
     if (!selectedRoomId) return;
@@ -601,6 +603,7 @@ function App() {
     setSelectedRule(null);
     setSelectedTargetA('');
     setSelectedTargetB('');
+    setSelectedDiscardUid('');
     setSelectedOrder([]);
   };
   const handleCreateRoom = async (event: React.FormEvent) => {
@@ -1086,17 +1089,17 @@ function App() {
       };
 
       const triggerDeckResetIfNeeded = () => {
-        const cardsInHands = Object.values(state.hands).reduce((acc, list) => acc + list.length, 0);
-        if (state.drawPile.length === 0 && cardsInHands === 0) {
-          const active = getActiveUsernames();
-          const fresh = initializeGameState(state.mode, active);
-          state.drawPile = fresh.drawPile;
-          state.discardPile = fresh.discardPile;
-          state.hands = fresh.hands;
-          state.statuses = { ...state.statuses, ...fresh.statuses };
-          state.currentCycle = safeNumber(state.currentCycle, 1) + 1;
-          deckReset = true;
-        }
+        if (state.drawPile.length > 0) return;
+        const allPlayers = Object.keys(state.hands);
+        state.drawPile = buildDeck(state.mode);
+        state.discardPile = [];
+        allPlayers.forEach((username) => {
+          state.hands[username] = [];
+          state.statuses[username] = {};
+        });
+        state.currentCycle = safeNumber(state.currentCycle, 1) + 1;
+        deckReset = true;
+        details.push('Todas as cartas foram usadas. O deck foi reembaralhado e as maos foram reiniciadas.');
       };
 
       const executeRule = (
@@ -1627,13 +1630,13 @@ function App() {
         details.push(`${displayName(actor.username)} recebeu compra extra de ${bonusDraw} carta(s).`);
       }
 
-      const actorHand = handFor(actor.username);
-      const cardIndex = actorHand.findIndex((item) => item.uid === selectedCard.instance.uid);
-      if (cardIndex < 0) {
-        throw new Error('Carta nao encontrada na mao do jogador.');
+      const drawIndex = state.drawPile.findIndex((item) => item.uid === selectedCard.instance.uid);
+      if (drawIndex < 0) {
+        throw new Error('Carta selecionada nao esta mais disponivel no deck.');
       }
-      const [playedInstance] = actorHand.splice(cardIndex, 1);
-      if (!playedInstance) throw new Error('Falha ao retirar carta da mao.');
+      const [drawnInstance] = state.drawPile.splice(drawIndex, 1);
+      if (!drawnInstance) throw new Error('Falha ao registrar carta puxada.');
+      handFor(actor.username).push(drawnInstance);
 
       const playRule = selectedRule ?? selectedCard.card.rules[Math.floor(Math.random() * selectedCard.card.rules.length)] ?? selectedCard.card.rules[0];
       if (!playRule) throw new Error('Carta sem regra valida.');
@@ -1653,8 +1656,34 @@ function App() {
 
       executeRule(actor.username, selectedCard.card, playRule, chosenTargets, 0);
 
-      if (selectedCard.card.id === 'death') returnCardToDraw(playedInstance);
-      else discardCard(playedInstance);
+      if (selectedCard.card.id === 'death') {
+        const actorCards = handFor(actor.username);
+        const deathIndex = actorCards.findIndex((item) => item.uid === drawnInstance.uid);
+        if (deathIndex >= 0) {
+          const [deathCard] = actorCards.splice(deathIndex, 1);
+          if (deathCard) returnCardToDraw(deathCard);
+        } else {
+          returnCardToDraw(drawnInstance);
+        }
+      }
+
+      const actorCardsAfterEffects = handFor(actor.username);
+      if (actorCardsAfterEffects.length >= 5) {
+        let discardIndex = -1;
+        if (selectedDiscardUid) {
+          discardIndex = actorCardsAfterEffects.findIndex((item) => item.uid === selectedDiscardUid);
+        }
+        if (discardIndex < 0) {
+          discardIndex = Math.max(0, actorCardsAfterEffects.length - 1);
+          details.push('Sem descarte escolhido, a carta mais recente foi descartada automaticamente.');
+        }
+        const [discarded] = actorCardsAfterEffects.splice(discardIndex, 1);
+        if (discarded) {
+          discardCard(discarded);
+          const discardedCardName = cardsById.get(discarded.cardId)?.name ?? discarded.cardId;
+          details.push(`${displayName(actor.username)} descartou ${discardedCardName} ao atingir 5 cartas na mao.`);
+        }
+      }
 
       const orderBase = (selectedRoom.turn_order ?? []).filter((username) => {
         const player = playersMap.get(username);
@@ -1758,6 +1787,7 @@ function App() {
       setSelectedRule(null);
       setSelectedTargetA('');
       setSelectedTargetB('');
+      setSelectedDiscardUid('');
       setSelectedOrder([]);
       toast(winner ? 'Temos um vencedor!' : 'Jogada aplicada.');
     } catch (error) {
@@ -1870,6 +1900,7 @@ function App() {
       setSelectedRule(null);
       setSelectedTargetA('');
       setSelectedTargetB('');
+      setSelectedDiscardUid('');
       setSelectedOrder([]);
       setRevealedHands({});
       toast('Nova partida pronta.');
@@ -1922,6 +1953,8 @@ function App() {
   const modalTargetCandidates = roomPlayers
     .filter((player) => player.username !== sessionUser.username)
     .map((player) => player.username);
+  const discardChoiceCandidates = selectedCard ? [...myHandInstances, selectedCard.instance] : myHandInstances;
+  const needsDiscardChoice = Boolean(selectedCard && discardChoiceCandidates.length >= 5);
 
   const discardCards = gameState.discardPile
     .slice(-12)
@@ -2114,8 +2147,8 @@ function App() {
 
             <section className="panel cards-section">
               <div className="cards-title-row">
-                <h2>Mao do jogador</h2>
-                <p className="muted">{canShowCards ? 'Seu turno: escolha uma carta da sua mao.' : 'Somente o jogador da vez pode usar cartas.'}</p>
+                <h2>Deck do Tarot</h2>
+                <p className="muted">{canShowCards ? 'Seu turno: selecione a carta que voce puxou no baralho real.' : 'Somente o jogador da vez pode registrar carta.'}</p>
               </div>
 
               {(roomMode === 'long' || handTab !== 'all') && (
@@ -2133,13 +2166,13 @@ function App() {
                 </div>
               )}
 
-              <p className="muted">Cartas na sua mao: {myHandInstances.length}</p>
+              <p className="muted">Cartas disponiveis para puxar: {gameState.drawPile.length} | Cartas na sua mao: {myHandInstances.length}</p>
 
               <div className="cards-grid">
-                {myHandCards.length === 0 && (
-                  <p className="muted">Nenhuma carta nesta aba da sua mao.</p>
+                {availableDeckCards.length === 0 && (
+                  <p className="muted">Nenhuma carta disponivel nesta aba do deck.</p>
                 )}
-                {myHandCards.map(({ instance, card }) => (
+                {availableDeckCards.map(({ instance, card }) => (
                   <button
                     key={instance.uid}
                     className={`tarot-card ${canShowCards ? '' : 'locked'}`}
@@ -2149,6 +2182,7 @@ function App() {
                       setSelectedRule(card.rules[Math.floor(Math.random() * card.rules.length)] ?? card.rules[0] ?? null);
                       setSelectedTargetA('');
                       setSelectedTargetB('');
+                      setSelectedDiscardUid('');
                       setSelectedOrder([]);
                     }}
                     style={{ background: `linear-gradient(160deg, ${card.palette[0]}dd, ${card.palette[1]}dd)` }}
@@ -2156,7 +2190,7 @@ function App() {
                     <p>{card.arcana}</p>
                     <span>{card.symbol}</span>
                     <h3>{card.name}</h3>
-                    <small>Clique para revelar o efeito</small>
+                    <small>Registrar carta puxada</small>
                   </button>
                 ))}
               </div>
@@ -2165,9 +2199,9 @@ function App() {
         )}
 
         {selectedCard && selectedRule && (
-          <div className="modal-backdrop" onClick={() => setSelectedCardUid(null)}>
+          <div className="modal-backdrop" onClick={() => { setSelectedCardUid(null); setSelectedDiscardUid(''); }}>
             <div className="card-modal" onClick={(event) => event.stopPropagation()}>
-              <button className="close-btn" onClick={() => setSelectedCardUid(null)}>x</button>
+              <button className="close-btn" onClick={() => { setSelectedCardUid(null); setSelectedDiscardUid(''); }}>x</button>
               <div className="modal-illustration" style={{ background: `linear-gradient(160deg, ${selectedCard.card.palette[0]}dd, ${selectedCard.card.palette[1]}dd)` }}>{selectedCard.card.symbol}</div>
               <div className="modal-content">
                 <p className="eyebrow">{selectedCard.card.arcana}</p>
@@ -2195,6 +2229,23 @@ function App() {
                   </select>
                 )}
 
+                {needsDiscardChoice && (
+                  <div className="stack-form">
+                    <p className="muted">Ao atingir 5 cartas na mao, escolha 1 descarte:</p>
+                    <select value={selectedDiscardUid} onChange={(event) => setSelectedDiscardUid(event.target.value)}>
+                      <option value="">Selecione a carta para descarte</option>
+                      {discardChoiceCandidates.map((entry) => {
+                        const discardCard = cardsById.get(entry.cardId);
+                        return (
+                          <option key={`discard-${entry.uid}`} value={entry.uid}>
+                            {discardCard?.name ?? entry.cardId}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
                 {selectedRule.requiresOrderSelection && (
                   <div className="stack-form">
                     <p className="muted">Defina a nova ordem da mesa (Imperatriz):</p>
@@ -2208,7 +2259,7 @@ function App() {
                   </div>
                 )}
 
-                <button onClick={applyCardEffect} disabled={isMutating}>Aplicar efeito</button>
+                <button onClick={applyCardEffect} disabled={isMutating || (needsDiscardChoice && !selectedDiscardUid)}>Aplicar efeito</button>
               </div>
             </div>
           </div>
