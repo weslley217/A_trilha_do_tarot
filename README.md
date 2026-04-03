@@ -35,6 +35,14 @@ Dashboard web em tempo real para noite de jogos usando React + Supabase.
 2. Execute o script [supabase/schema.sql](./supabase/schema.sql).
 3. Confirme que as tabelas foram criadas e que a sessao inicial foi semeada.
 
+### Banco ja existente (migracao rapida)
+
+Se o banco ja estava em uso antes das colunas de modo/estado, execute tambem:
+
+- [supabase/20260403_add_mode_state_columns.sql](./supabase/20260403_add_mode_state_columns.sql)
+
+Sem essa migracao, o app entra em modo de compatibilidade automaticamente.
+
 ## Variaveis de ambiente
 
 Use o arquivo `.env.local` (ja criado localmente) ou copie de `.env.example`.

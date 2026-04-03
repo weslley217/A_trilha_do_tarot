@@ -63,7 +63,48 @@ function stripActionMeta(description: string): string {
   return description
     .replace(/\s*::WHEEL:[+-]?\d+/gi, '')
     .replace(/\s*::DECK_RESET/gi, '')
+    .replace(/\s*::MODE:(short|long)/gi, '')
+    .replace(/\s*::STATE:[^\s]+/gi, '')
+    .replace(/\s*::STATE_RESET/gi, '')
     .trim();
+}
+
+function encodeStateToken(state: GameState): string {
+  return encodeURIComponent(JSON.stringify(state));
+}
+
+function decodeStateToken(token: string): GameState | null {
+  try {
+    const decoded = decodeURIComponent(token);
+    const parsed = JSON.parse(decoded) as GameState;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function extractModeToken(description: string): GameMode | null {
+  const match = description.match(/::MODE:(short|long)/i);
+  if (!match) return null;
+  const value = match[1]?.toLowerCase();
+  return value === 'long' ? 'long' : value === 'short' ? 'short' : null;
+}
+
+function extractStateToken(description: string): GameState | null {
+  const match = description.match(/::STATE:([^\s]+)/i);
+  if (!match?.[1]) return null;
+  return decodeStateToken(match[1]);
+}
+
+function isMissingRoomStateColumnsError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const maybe = error as { code?: string; message?: string };
+  const message = `${maybe.message ?? ''}`.toLowerCase();
+  return (
+    maybe.code === '42703' &&
+    (message.includes('game_mode') || message.includes('game_state'))
+  );
 }
 
 function safeNumber(value: unknown, fallback = 0): number {
@@ -176,6 +217,7 @@ function App() {
   const [selectedOrder, setSelectedOrder] = useState<string[]>([]);
   const [handTab, setHandTab] = useState<'all' | CardGroup>('all');
   const [revealedHands, setRevealedHands] = useState<Record<string, boolean>>({});
+  const [supportsRoomStateColumns, setSupportsRoomStateColumns] = useState<boolean | null>(null);
 
   const [isMutating, setIsMutating] = useState(false);
   const [uiMessage, setUiMessage] = useState('');
@@ -205,11 +247,32 @@ function App() {
     return rooms.filter((room) => set.has(room.id));
   }, [memberRoomIds, rooms, sessionUser]);
 
-  const roomMode: GameMode = (selectedRoom?.game_mode as GameMode) || 'short';
+  const fallbackModeFromActions = useMemo(() => {
+    for (const action of actions) {
+      const mode = extractModeToken(action.description);
+      if (mode) return mode;
+    }
+    return null;
+  }, [actions]);
+
+  const roomMode: GameMode = (selectedRoom?.game_mode as GameMode) || fallbackModeFromActions || 'short';
   const roomUsernames = useMemo(() => roomPlayers.map((p) => p.username), [roomPlayers]);
+  const fallbackStateFromActions = useMemo(() => {
+    for (const action of actions) {
+      if (action.description.includes('::STATE_RESET')) return null;
+      const state = extractStateToken(action.description);
+      if (state) return state;
+    }
+    return null;
+  }, [actions]);
+
+  const gameStateSource = supportsRoomStateColumns === false
+    ? fallbackStateFromActions
+    : selectedRoom?.game_state;
+
   const gameState = useMemo(
-    () => normalizeRoomGameState(selectedRoom?.game_state, roomMode, roomUsernames),
-    [selectedRoom?.game_state, roomMode, roomUsernames]
+    () => normalizeRoomGameState(gameStateSource, roomMode, roomUsernames),
+    [gameStateSource, roomMode, roomUsernames]
   );
 
   const roomPlayerMap = useMemo(() => {
@@ -308,6 +371,25 @@ function App() {
     if (error) throw error;
     return (data ?? []).map((row) => row.room_id as string);
   };
+
+  const detectRoomStateColumnsSupport = async () => {
+    const { error } = await supabase
+      .from('game_rooms')
+      .select('id,game_mode,game_state')
+      .limit(1);
+
+    if (!error) {
+      setSupportsRoomStateColumns(true);
+      return;
+    }
+
+    if (isMissingRoomStateColumnsError(error)) {
+      setSupportsRoomStateColumns(false);
+      return;
+    }
+
+    throw error;
+  };
   const loadRoomData = async (roomId: string) => {
     const [{ data: roomData, error: roomError }, { data: playersData, error: playersError }, { data: actionsData, error: actionsError }] =
       await Promise.all([
@@ -324,7 +406,6 @@ function App() {
     setSelectedRoom(room);
     setRoomPlayers((playersData ?? []) as RoomPlayer[]);
     setActions((actionsData ?? []) as GameAction[]);
-    if (room?.game_mode) setRoomModeDraft(room.game_mode);
   };
 
   const refreshBaseData = async (preferredRoomId?: string | null) => {
@@ -351,6 +432,7 @@ function App() {
   useEffect(() => {
     const boot = async () => {
       try {
+        await detectRoomStateColumnsSupport();
         const usersData = await fetchUsers();
         setUsers(usersData);
 
@@ -368,6 +450,7 @@ function App() {
     };
 
     void boot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -426,6 +509,11 @@ function App() {
       setSelectedOrder([]);
     }
   }, [myHandInstances, selectedCardUid]);
+
+  useEffect(() => {
+    if (!selectedRoomId) return;
+    setRoomModeDraft(roomMode);
+  }, [roomMode, selectedRoomId]);
 
   useEffect(() => {
     if (!selectedRoomId || actions.length === 0) {
@@ -523,27 +611,54 @@ function App() {
 
     setIsMutating(true);
     try {
+      const useLegacyMode = supportsRoomStateColumns === false;
+      const insertPayload = useLegacyMode
+        ? {
+            name,
+            created_by: sessionUser.username,
+            status: 'waiting' as const,
+            turn_order: [] as string[],
+            current_turn_index: 0,
+          }
+        : {
+            name,
+            created_by: sessionUser.username,
+            status: 'waiting' as const,
+            game_mode: newRoomMode,
+            game_state: {},
+            turn_order: [] as string[],
+            current_turn_index: 0,
+          };
+
       const { data, error } = await supabase
         .from('game_rooms')
-        .insert({
-          name,
-          created_by: sessionUser.username,
-          status: 'waiting',
-          game_mode: newRoomMode,
-          game_state: {},
-          turn_order: [],
-          current_turn_index: 0,
-        })
+        .insert(insertPayload)
         .select('*')
         .single();
 
       if (error) throw error;
+
+      if (useLegacyMode) {
+        await supabase.from('game_actions').insert({
+          room_id: (data as GameRoom).id,
+          actor_username: sessionUser.username,
+          target_username: null,
+          card_key: null,
+          description: `Modo da sessao definido para ${newRoomMode === 'short' ? 'curto' : 'longo'}. ::MODE:${newRoomMode}`,
+        });
+      }
+
       setNewRoomName('');
       setNewRoomMode('short');
       await refreshBaseData((data as GameRoom).id);
       toast('Sessao criada.');
     } catch (error) {
       console.error(error);
+      if (isMissingRoomStateColumnsError(error)) {
+        setSupportsRoomStateColumns(false);
+        toast('Banco antigo detectado. Tente novamente; modo compatibilidade foi ativado.');
+        return;
+      }
       toast('Erro ao criar sessao.');
     } finally {
       setIsMutating(false);
@@ -644,15 +759,32 @@ function App() {
     }
     setIsMutating(true);
     try {
-      const { error } = await supabase
-        .from('game_rooms')
-        .update({ game_mode: roomModeDraft, game_state: {} })
-        .eq('id', selectedRoom.id)
-        .eq('status', 'waiting');
-      if (error) throw error;
+      const useLegacyMode = supportsRoomStateColumns === false;
+      if (!useLegacyMode) {
+        const { error } = await supabase
+          .from('game_rooms')
+          .update({ game_mode: roomModeDraft, game_state: {} })
+          .eq('id', selectedRoom.id)
+          .eq('status', 'waiting');
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('game_actions').insert({
+          room_id: selectedRoom.id,
+          actor_username: sessionUser.username,
+          target_username: null,
+          card_key: null,
+          description: `Modo da sessao definido para ${roomModeDraft === 'short' ? 'curto' : 'longo'}. ::MODE:${roomModeDraft}`,
+        });
+        if (error) throw error;
+      }
       toast('Modo da sessao atualizado.');
     } catch (error) {
       console.error(error);
+      if (isMissingRoomStateColumnsError(error)) {
+        setSupportsRoomStateColumns(false);
+        toast('Modo compatibilidade ativado. Clique em atualizar modo novamente.');
+        return;
+      }
       toast('Erro ao atualizar modo.');
     } finally {
       setIsMutating(false);
@@ -672,23 +804,51 @@ function App() {
     const players = (playersData ?? []) as RoomPlayer[];
     if (players.length === 0 || players.some((player) => !player.is_ready)) return;
 
+    const useLegacyMode = supportsRoomStateColumns === false;
+    let mode = (room.game_mode as GameMode) || roomModeDraft || 'short';
+    if (useLegacyMode || !room.game_mode) {
+      const { data: modeActions, error: modeActionsError } = await supabase
+        .from('game_actions')
+        .select('description')
+        .eq('room_id', roomId)
+        .order('created_at', { ascending: false })
+        .limit(80);
+      if (modeActionsError) throw modeActionsError;
+      for (const action of modeActions ?? []) {
+        const parsedMode = extractModeToken(action.description as string);
+        if (parsedMode) {
+          mode = parsedMode;
+          break;
+        }
+      }
+    }
+
     const turnOrder = shuffle(players.map((player) => player.username));
     const now = new Date().toISOString();
-    const mode = (room.game_mode as GameMode) || 'short';
     const gameStateSeed = initializeGameState(mode, turnOrder);
+    const updatePayload = useLegacyMode
+      ? {
+          status: 'running' as const,
+          turn_order: turnOrder,
+          current_turn_index: 0,
+          winner_username: null as string | null,
+          started_at: now,
+          ended_at: null as string | null,
+        }
+      : {
+          status: 'running' as const,
+          game_mode: mode,
+          game_state: gameStateSeed,
+          turn_order: turnOrder,
+          current_turn_index: 0,
+          winner_username: null as string | null,
+          started_at: now,
+          ended_at: null as string | null,
+        };
 
     const { data: startedRoom, error: startError } = await supabase
       .from('game_rooms')
-      .update({
-        status: 'running',
-        game_mode: mode,
-        game_state: gameStateSeed,
-        turn_order: turnOrder,
-        current_turn_index: 0,
-        winner_username: null,
-        started_at: now,
-        ended_at: null,
-      })
+      .update(updatePayload)
       .eq('id', roomId)
       .eq('status', 'waiting')
       .select('*')
@@ -705,7 +865,7 @@ function App() {
       actor_username: 'mestre',
       target_username: null,
       card_key: null,
-      description: `Partida iniciada no modo ${mode === 'short' ? 'curto' : 'longo'}. Primeiro turno: ${firstName}.`,
+      description: `Partida iniciada no modo ${mode === 'short' ? 'curto' : 'longo'}. Primeiro turno: ${firstName}.${useLegacyMode ? ` ::MODE:${mode} ::STATE:${encodeStateToken(gameStateSeed)}` : ''}`,
     });
   };
 
@@ -727,6 +887,11 @@ function App() {
       toast(!me.is_ready ? 'Voce marcou pronto.' : 'Voce removeu o pronto.');
     } catch (error) {
       console.error(error);
+      if (isMissingRoomStateColumnsError(error)) {
+        setSupportsRoomStateColumns(false);
+        toast('Banco antigo detectado. Tente marcar pronto novamente.');
+        return;
+      }
       toast('Erro ao atualizar pronto.');
     } finally {
       setIsMutating(false);
@@ -748,7 +913,7 @@ function App() {
       return;
     }
 
-    const state = cloneGameState(normalizeRoomGameState(selectedRoom.game_state, roomMode, roomUsernames));
+    const state = cloneGameState(gameState);
     const actorStatus = ensureStatus(state, actor.username);
 
     if ((actorStatus.skipTurns ?? 0) > 0) {
@@ -1535,18 +1700,19 @@ function App() {
       }
 
       const now = new Date().toISOString();
-      const roomUpdate: Partial<GameRoom> = winner
+      const useLegacyMode = supportsRoomStateColumns === false;
+      const roomUpdate = winner
         ? {
-            status: 'finished',
+            status: 'finished' as const,
             winner_username: winner.username,
             ended_at: now,
-            game_state: state,
             turn_order: order,
+            ...(useLegacyMode ? {} : { game_state: state }),
           }
         : {
             current_turn_index: Math.max(0, order.indexOf(nextTurnUser)),
             turn_order: order,
-            game_state: state,
+            ...(useLegacyMode ? {} : { game_state: state }),
           };
 
       const { error: roomError } = await supabase
@@ -1574,9 +1740,10 @@ function App() {
       const wheelMeta = wheelDelta != null ? ` ::WHEEL:${formatSigned(wheelDelta)}` : '';
       const deckMeta = deckReset ? ' ::DECK_RESET' : '';
 
+      const legacyMeta = useLegacyMode ? ` ::MODE:${roomMode} ::STATE:${encodeStateToken(state)}` : '';
       const description = winner
-        ? `${actorName} jogou ${selectedCard.card.name}.${targetLog}${detailLog}${skipLog} ${displayName(winner.username)} venceu a partida!${wheelMeta}${deckMeta}`
-        : `${actorName} jogou ${selectedCard.card.name}.${targetLog}${detailLog}${skipLog} Proximo turno: ${displayName(nextTurnUser)}.${wheelMeta}${deckMeta}`;
+        ? `${actorName} jogou ${selectedCard.card.name}.${targetLog}${detailLog}${skipLog} ${displayName(winner.username)} venceu a partida!${wheelMeta}${deckMeta}${legacyMeta}`
+        : `${actorName} jogou ${selectedCard.card.name}.${targetLog}${detailLog}${skipLog} Proximo turno: ${displayName(nextTurnUser)}.${wheelMeta}${deckMeta}${legacyMeta}`;
 
       const { error: actionError } = await supabase.from('game_actions').insert({
         room_id: selectedRoom.id,
@@ -1595,6 +1762,11 @@ function App() {
       toast(winner ? 'Temos um vencedor!' : 'Jogada aplicada.');
     } catch (error) {
       console.error(error);
+      if (isMissingRoomStateColumnsError(error)) {
+        setSupportsRoomStateColumns(false);
+        toast('Banco antigo detectado. Aplique a carta novamente.');
+        return;
+      }
       toast('Erro ao aplicar carta.');
     } finally {
       setIsMutating(false);
@@ -1611,7 +1783,7 @@ function App() {
     const order = selectedRoom.turn_order ?? [];
     if (order.length === 0) return;
 
-    const state = cloneGameState(normalizeRoomGameState(selectedRoom.game_state, roomMode, roomUsernames));
+    const state = cloneGameState(gameState);
     const actorStatus = ensureStatus(state, sessionUser.username);
 
     if (safeNumber(actorStatus.pendingPointPenaltyNextTurn) > 0) {
@@ -1630,9 +1802,10 @@ function App() {
 
     setIsMutating(true);
     try {
+      const useLegacyMode = supportsRoomStateColumns === false;
       const { error } = await supabase
         .from('game_rooms')
-        .update({ current_turn_index: nextIndex, game_state: state })
+        .update({ current_turn_index: nextIndex, ...(useLegacyMode ? {} : { game_state: state }) })
         .eq('id', selectedRoom.id)
         .eq('status', 'running');
       if (error) throw error;
@@ -1644,11 +1817,16 @@ function App() {
         actor_username: sessionUser.username,
         target_username: null,
         card_key: null,
-        description: `${actorName} encerrou a rodada sem carta. Proximo turno: ${nextName}.`,
+        description: `${actorName} encerrou a rodada sem carta. Proximo turno: ${nextName}.${useLegacyMode ? ` ::MODE:${roomMode} ::STATE:${encodeStateToken(state)}` : ''}`,
       });
       toast('Rodada encerrada.');
     } catch (error) {
       console.error(error);
+      if (isMissingRoomStateColumnsError(error)) {
+        setSupportsRoomStateColumns(false);
+        toast('Banco antigo detectado. Tente encerrar rodada novamente.');
+        return;
+      }
       toast('Erro ao avancar turno.');
     } finally {
       setIsMutating(false);
@@ -1670,7 +1848,7 @@ function App() {
         .from('game_rooms')
         .update({
           status: 'waiting',
-          game_state: {},
+          ...(supportsRoomStateColumns === false ? {} : { game_state: {} }),
           turn_order: [],
           current_turn_index: 0,
           winner_username: null,
@@ -1685,7 +1863,7 @@ function App() {
         actor_username: sessionUser?.username ?? 'mestre',
         target_username: null,
         card_key: null,
-        description: 'Nova partida preparada. Aguardando todos marcarem pronto.',
+        description: `Nova partida preparada. Aguardando todos marcarem pronto. ::STATE_RESET${supportsRoomStateColumns === false ? ` ::MODE:${roomModeDraft}` : ''}`,
       });
 
       setSelectedCardUid(null);
@@ -1697,6 +1875,11 @@ function App() {
       toast('Nova partida pronta.');
     } catch (error) {
       console.error(error);
+      if (isMissingRoomStateColumnsError(error)) {
+        setSupportsRoomStateColumns(false);
+        toast('Banco antigo detectado. Tente resetar novamente.');
+        return;
+      }
       toast('Erro ao preparar nova partida.');
     } finally {
       setIsMutating(false);
@@ -1756,6 +1939,9 @@ function App() {
             <p className="eyebrow">Noite mistica em tempo real</p>
             <h1>A Trilha do Tarot</h1>
             <p className="subtitle">Logado como {sessionUser.display_name} ({sessionUser.role === 'master' ? 'mestre' : 'jogador'})</p>
+            {supportsRoomStateColumns === false && (
+              <p className="muted">Modo de compatibilidade ativo: execute `supabase/schema.sql` no banco para usar armazenamento nativo de modo/estado.</p>
+            )}
           </div>
           <button className="ghost-btn" onClick={handleLogout}>Sair</button>
         </header>
